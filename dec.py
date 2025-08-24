@@ -40,7 +40,6 @@ def read_key_hex_or_raw(path):
 
     return key
 
-
 def decrypt_aes_gcm(data, key):
     # 데이터 검증
     if not isinstance(data, (bytes, bytearray)):
@@ -48,15 +47,15 @@ def decrypt_aes_gcm(data, key):
     if not isinstance(key, (bytes, bytearray)):
         raise TypeError("key는 bytes여야 함")
     if len(key) != 32:
-        raise ValueError("키 길이 오류 (32바이트 아님)")
+        raise ValueError("키 길이 오류")
 
     # 최소 길이: 12바이트 nonce + 최소 1바이트 ct + 16바이트 tag
     if len(data) < 29:
         raise ValueError("복호화 대상 아님")
 
     nonce = data[:12]
-    tag   = data[-16:]
-    ct    = data[12:-16]
+    tag = data[-16:]
+    ct = data[12:-16]
 
     try:
         cipher = AES.new(bytes(key), AES.MODE_GCM, nonce=nonce)
@@ -67,28 +66,42 @@ def decrypt_aes_gcm(data, key):
     except Exception as e:
         raise RuntimeError("복호화 중 오류: {}".format(e))
 
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--key", required=True, help=".aes 키 파일 경로")
-    ap.add_argument("--root", required=True, help="탐색 시작 폴더 (기본: 사용자 바탕화면)")
+    ap.add_argument("--root", required=True, help="탐색 시작 폴더")
     args = ap.parse_args()
 
     key = read_key_hex_or_raw(args.key)
     root = args.root
 
-    src = os.path.join(root, "FLAG.txt.ryk")
-    dst = os.path.join(root, "FLAG.txt")
+    if not os.path.isdir(root):
+        print("탐색 시작 폴더 경로가 올바르지 않음", root)
+        sys.exit(1)
 
-  
-    with open(src, "rb") as f:
-        data = f.read()
-    pt = decrypt_aes_gcm(data, key)
+    total = ok = fail = 0
 
-    with open(dst, "wb") as f:
-        f.write(pt)
+    for dirpath, _, filenames in os.walk(root):
+        for name in filenames:
+            if not name.lower().endswith(".ryk"):
+                continue
+            total += 1
+            src = os.path.join(dirpath, name)
+            dst = src[:-4]  # .ryk 확장자 제거
 
-    os.remove(src)
+            try:
+                with open(src, "rb") as f:
+                    data = f.read()
+                pt = decrypt_aes_gcm(data, key)
+                with open(dst, "wb") as f:
+                    f.write(pt)
+                os.remove(src)
+                ok += 1
+            except Exception as e:
+                fail += 1
+    if total == 0:
+        print(f"대상 파일(.ryk) 없음")
+    print(f"\n복호화 완료 total={total}, success={ok}, fail={fail}")
 
 if __name__ == "__main__":
     main()
